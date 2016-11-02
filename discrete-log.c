@@ -1,66 +1,91 @@
+/*
+ * discrete-log.c - calculate the discrete logarithm
+ *
+ * 2016-11-01 Steven Wart created this file
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
 #include <errno.h>
+#include <stdarg.h>
+#include <gmp.h>
+#include <glib.h>
 
 void print_usage(char *name) {
-  printf("Usage: %s <integer> <integer>\n\n", name);
+  printf("This program will compute the discrete logarithm of a number x such that <val> = <base>^x mod <mod>\n");
+  printf("Usage: %s <val> <base> <mod>\n", name);
   exit(0);
 }
 
-long long int parse_number(char *stringValue) {
-  long long int result;
-
-  result = strtoll(stringValue, NULL, 0);
-  if ((result == LLONG_MIN) || (result == LLONG_MAX)) {
+//
+// Parse an integer value from the string and put it into result
+// If the number cannot be parsed, exit the program
+//
+void parse_integer(mpz_t result, char *stringValue) {
+  // parse number using base=0 so we can accept 0x for hexadecimal numbers
+  int err = mpz_set_str(result, stringValue, 0);
+  if (err < 0) {
     perror("invalid number");
     exit(0);
   }
-  return result;
 }
 
-// Use Euclid's algorithm for small integers
-long long int euclid(long long int m, long long int n) {
-  long long int t;
+// compute the discrete logarithm of g to the base h modulo p
+void discrete_log(mpz_t result, mpz_t g, mpz_t h, mpz_t p) {
+  GHashTable *lookup;
+  unsigned long int B = 2^20;
+  mpz_t lhs, rhs;
+
+  mpz_inits(lhs, rhs, NULL);
+
+  // create a hashtable to lookup the results
+  lookup = g_hash_table_new(g_str_hash, g_str_equal);  // XXX use mpz_cmp instead of g_str_equal
   
-  while (n != 0) {
-    t = n;
-    n = m % n;
-    m = t;
+  // 1. First build a dictionary of all the possible values of the left hand size of the equation h/g^x_1
+  for (long int x_1=0; x_1 < B; x_1++) {
+    mpz_powm(result, g, x_1, p);  // g^x_1 % p
+    mpz_fdiv(lhs, g, exp, mod);   // floor div h / g^x_1
+    g_hash_table_insert(lookup, lhs, x_1);
   }
-  return m;
-}
-
-long long int gcd(long long int a, long long int b) {
-  long long int m, n, g, t;
-
-  m = llabs(a);
-  n = llabs(b);
-
-  // the smallest number should be the first argument
-  if (n < m) {
-    t = m; m = n; n = t;
+  
+  // 2. Then, for each value x_0 = 0, 1, 2, ..., 2^20 check if the right hand side (g^B)^x_0 is in the hash table
+  for (long int x_0=0; x_0 < B; x_0++) {
+    mpz_pow_ui(result, g, B);      // g^B
+    mpz_pow_ui(rhs, result, x_0);  // (g^B)^x_0
+    if (g_hash_table_lookup(lookup, rhs)) {
+      mpz_mul_ui(result, x_0, B);   // x_0*B
+      mpz_add(result, result, x_1); // x_0*B + x_1
+      g_hash_table_destroy(lookup);
+      mpz_clears(lhs, rhs, result, NULL);
+      return;
+    }
   }
-  if (m == 0) {
-    return n;
-  }
-  return euclid(m, n);
+  g_hash_table_destroy(lookup);
+  mpz_clears(lhs, rhs, result, NULL);
 }
 
 int main(int argc, char **argv) {
-  long long int g, m, n;
+  mpz_t val, base, mod, result;
+  char *resultString;
 
-  // if two numeric arguments aren't provided
+  mpz_inits(val, base, mod, result, NULL);
+  
+  // if three numeric arguments aren't provided
   // print usage and exit
-  if (argc != 3) {
+  if (argc != 4) {
     print_usage(argv[0]);
   }
 
   // parse the inputs
-  m = parse_number(argv[1]);
-  n = parse_number(argv[2]);
-
-  g = gcd(m, n);
+  parse_integer(val, argv[1]);
+  parse_integer(base, argv[2]);
+  parse_integer(mod, argv[3]);
   
-  printf("%lld\n", g);
+  discrete_log(result, base, exp, mod);
+
+  // use the current allocation function for the result string (and in base 10)
+  resultString = mpz_get_str(NULL, 10, result);
+  
+  printf("%s\n", resultString);
 }

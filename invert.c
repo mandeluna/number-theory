@@ -1,5 +1,5 @@
 /*
- * exponent.c - calculate the exponent of a large integer in an integer multiplation group
+ * invert.c - calculate the inverse of a large integer in an integer multiplation group
  *
  * 2016-11-01 Steven Wart created this file
  *
@@ -13,8 +13,8 @@
 #include <gmp.h>
 
 void print_usage(char *name) {
-  printf("This program will raise a large integer value to the exponent provided, in the multiplication group modulo the modulus provided\n");
-  printf("Usage: %s <exp> <base> <mod>\n", name);
+  printf("This program will compute the inverse of integer value, in the multiplication group for the modulus provided\n");
+  printf("Usage: %s <value> <prime>\n", name);
   exit(0);
 }
 
@@ -32,27 +32,32 @@ void parse_integer(mpz_t result, char *stringValue) {
 }
 
 int main(int argc, char **argv) {
-  mpz_t exp, base, mod, result;
+  mpz_t value, mod, pminus2, result;
   char *resultString;
 
-  mpz_inits(exp, base, mod, result, NULL);
+  mpz_inits(value, mod, pminus2, result, NULL);
   
   // if three numeric arguments aren't provided
   // print usage and exit
-  if (argc != 4) {
+  if (argc != 3) {
     print_usage(argv[0]);
   }
 
   // parse the inputs
-  parse_integer(exp, argv[1]);
-  parse_integer(base, argv[2]);
-  parse_integer(mod, argv[3]);
+  parse_integer(value, argv[1]);
+  parse_integer(mod, argv[2]);
 
-  /* printf("exp=%s\n", mpz_get_str(NULL, 10, exp)); */
-  /* printf("base=%s\n", mpz_get_str(NULL, 10, base)); */
-  /* printf("mod=%s\n", mpz_get_str(NULL, 10, mod)); */
+  // 1. for prime p we have a^p = a mod p
+  // 2. and if a is not divisible by p, then a^(p-1) = 1 mod p
+  // 3. and a * (a^(p-2)) = a^(p-1) = 1
+  // 4. or 1 / a mod p = a^(p-2) mod p
+  // 5. therefore dividing by a is like multiplying by a^(p-2) mod p
+  mpz_sub_ui(pminus2, mod, 2L);           // compute p-2
+
+  /* resultString = mpz_get_str(NULL, 10, pminus2); */
+  /* printf("p-2=%s\n", resultString); */
   
-  mpz_powm(result, base, exp, mod);
+  mpz_powm(result, value, pminus2, mod);  // compute a^(p-2) mod p
 
   // use the current allocation function for the result string (and in base 10)
   resultString = mpz_get_str(NULL, 10, result);
