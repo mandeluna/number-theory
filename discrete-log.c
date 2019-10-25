@@ -31,16 +31,37 @@ void parse_integer(mpz_t result, char *stringValue) {
   }
 }
 
+// hash function for putting mpz_t values into a glib hash function
+// see: http://www.isthe.com/chongo/tech/comp/fnv/
+// we use the 64-bit variant but instead of iterating one byte at
+// a time (as you would for strings) we iterate 64-bits at a time
+guint (*GHashFunc) dl_mpz_hash(mpz_t key); {
+  return 0;
+}
+
+// equality function for mpz_t values
+// return TRUE if a and b are equal, FALSE otherwise
+gboolean(*GEqualFunc) dl_mpz_equal(gconstpointer a, gconstpointer b) {
+  mpz_t *op1 = (mpz_t *)a;
+  mpz_t *op2 = (mpz_t *)b;
+  return mpz_cmp (op1, op2) == 0;
+}
+
+
 // compute the discrete logarithm of g to the base h modulo p
 void discrete_log(mpz_t result, mpz_t g, mpz_t h, mpz_t p) {
   GHashTable *lookup;
   unsigned long int B = 2^20;
   mpz_t lhs, rhs;
 
+  // Set g to the greatest common divisor of a and b, and in addition set s and t to coefficients satisfying a*s + b*t = g.
+  // This will give us s, the multiplicative inverse of a (needed for subsequent computations)
+  // mpz_gcdext (mpz_t g, mpz_t s, mpz_t t, const mpz_t a, const mpz_t b)
+
   mpz_inits(lhs, rhs, NULL);
 
   // create a hashtable to lookup the results
-  lookup = g_hash_table_new(g_str_hash, g_str_equal);  // XXX use mpz_cmp instead of g_str_equal
+  lookup = g_hash_table_new(dl_mpz_hash, dl_mpz_equal);  // XXX use mpz_cmp instead of g_str_equal
   
   // 1. First build a dictionary of all the possible values of the left hand size of the equation h/g^x_1
   for (long int x_1=0; x_1 < B; x_1++) {
